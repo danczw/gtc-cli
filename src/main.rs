@@ -4,6 +4,7 @@ use std::io::{self, Write};
 #[tokio::main]
 async fn main() {
     // TODO: add logging
+
     const GTC_PROFILE: &str = ".gtc";
     let gtc_profile_path = gtc::set_home_dir_path(GTC_PROFILE);
 
@@ -34,14 +35,17 @@ async fn main() {
             }
         } else {
             // create profile if it doesn't exist and prompt user for openai key
-            let openai_key = gtc::input(
+            let key_input = gtc::input(
                 "No OpenAI API key found, please enter:",
                 &mut io::stdin().lock(),
                 &mut io::stdout(),
             );
+            let openai_key = key_input.unwrap().trim().to_string();
+
             // update context and return
             gtc::Context {
-                openai_key: openai_key.unwrap().trim().to_string(),
+                openai_key: openai_key.clone(),
+                key_hash: gtc::calc_hash(&openai_key),
                 hist: vec![],
             }
         };
