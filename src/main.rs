@@ -16,7 +16,7 @@ async fn main() {
             // read existing profile file
             let mut ctx_read = gtc::read_context(&gtc_profile_path);
 
-            match ctx_read.openai_key.is_empty() {
+            match ctx_read.key_empty {
                 // prompt user for openai key
                 true => {
                     // get openai key from user
@@ -26,15 +26,14 @@ async fn main() {
                         &mut io::stdout(),
                     );
                     // update context and return
-                    ctx_read.openai_key = openai_key.unwrap().trim().to_string();
+                    ctx_read.update_key(openai_key.unwrap().trim().to_string());
                     ctx_read.hist = vec![];
                     ctx_read
                 }
-                // else return context
                 false => ctx_read,
             }
         } else {
-            // create profile if it doesn't exist and prompt user for openai key
+            // prompt user for openai key
             let key_input = gtc::input(
                 "No OpenAI API key found, please enter:",
                 &mut io::stdin().lock(),
@@ -43,11 +42,7 @@ async fn main() {
             let openai_key = key_input.unwrap().trim().to_string();
 
             // update context and return
-            gtc::Context {
-                openai_key: openai_key.clone(),
-                key_hash: gtc::calc_hash(&openai_key),
-                hist: vec![],
-            }
+            gtc::Context::new(openai_key)
         };
 
         // call OpenAI API and display response
@@ -65,7 +60,7 @@ async fn main() {
                 ctx.hist.push("assistant||".to_owned() + answer);
                 // clear profile file and write key as well as last 6 messages to file
                 let mut file = std::fs::File::create(&gtc_profile_path).unwrap();
-                writeln!(file, "{}", ctx.openai_key).unwrap();
+                writeln!(file, "{}", ctx.get_key()).unwrap();
                 for line in ctx.hist.iter().rev().take(6).rev() {
                     writeln!(file, "{}", line.replace('\n', "")).unwrap();
                 }

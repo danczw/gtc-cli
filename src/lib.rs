@@ -3,6 +3,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use dirs::home_dir;
 use reqwest::{header, Client, StatusCode};
 use serde_json::{json, Map, Value};
+use std::fmt::Debug;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io;
 use std::path::PathBuf;
@@ -14,28 +15,48 @@ pub fn set_home_dir_path(file_name: &str) -> PathBuf {
     path
 }
 
-pub fn calc_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
-}
-
 #[derive(PartialEq, Debug)]
 pub struct Context {
-    pub openai_key: String,
-    pub key_hash: u64,
+    key_val: String,
+    key_hash: u64,
+    pub key_empty: bool,
     pub hist: Vec<String>,
 }
 
+impl Context {
+    pub fn new(key: String) -> Context {
+        let key = key.trim().to_string();
+
+        Context {
+            key_val: key.clone(),
+            key_empty: key.is_empty(),
+            key_hash: Context::_hash_key(&key),
+            hist: vec![],
+        }
+    }
+
+    pub fn get_key(&self) -> &String {
+        &self.key_val
+    }
+
+    pub fn update_key(&mut self, key: String) {
+        let key = key.trim().to_string();
+
+        self.key_val = key.clone();
+        self.key_empty = key.is_empty();
+        self.key_hash = Context::_hash_key(&key)
+    }
+
+    fn _hash_key<T: Hash>(t: &T) -> u64 {
+        let mut s = DefaultHasher::new();
+        t.hash(&mut s);
+        s.finish()
+    }
+}
+
 pub fn read_context(hist_file_path: &PathBuf) -> Context {
-    // Initialize Context struct
-    let empt = String::from("");
-    let mut ctx = Context {
-        openai_key: empt.clone(),
-        key_hash: calc_hash(&empt),
-        hist: vec![],
-    };
-    // Read profile
+    let mut ctx = Context::new(String::from(""));
+
     let saved = std::fs::read_to_string(hist_file_path).unwrap_or("".to_string());
 
     // if file is empty or doesn't exist, delete potential file return empty Context struct
@@ -44,8 +65,7 @@ pub fn read_context(hist_file_path: &PathBuf) -> Context {
         ctx
     } else {
         // get openai key from first line of file
-        ctx.openai_key = saved.lines().next().unwrap().to_string();
-        ctx.key_hash = calc_hash(&ctx.openai_key);
+        ctx.update_key(saved.lines().next().unwrap().to_string());
 
         // get chat history from rest of file
         for line in saved.lines().skip(1) {
@@ -53,17 +73,6 @@ pub fn read_context(hist_file_path: &PathBuf) -> Context {
         }
         ctx
     }
-}
-
-pub fn new_context(key: String) -> Context {
-    // Initialize Context struct
-    let ctx = Context {
-        openai_key: key.trim().to_string(),
-        key_hash: calc_hash(&key),
-        hist: vec![],
-    };
-
-    ctx
 }
 
 pub fn input<R, W>(prompt: &str, mut reader: R, mut writer: W) -> Result<String, io::Error>
@@ -114,7 +123,7 @@ pub async fn call_oai(
         "Content-Type",
         header::HeaderValue::from_static("application/json"),
     );
-    let auth_value = format!("Bearer {}", ctx.openai_key.as_str());
+    let auth_value = format!("Bearer {}", ctx.get_key().as_str());
     let mut auth_value = header::HeaderValue::from_str(&auth_value).unwrap();
     auth_value.set_sensitive(true);
     headers.insert(header::AUTHORIZATION, auth_value);
